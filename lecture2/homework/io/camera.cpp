@@ -38,7 +38,7 @@ Camera::Camera()
         throw std::runtime_error("MV_CC_SetFloatValue ExposureTime failed");
     }
 
-    ret = MV_CC_SetFloatValue(handle_, "Gain", 10); //0~16.9?
+    ret = MV_CC_SetFloatValue(handle_, "Gain", 16.9); //0~16.9
     if (ret != MV_OK) {
         MV_CC_CloseDevice(handle_);
         MV_CC_DestroyHandle(handle_);
