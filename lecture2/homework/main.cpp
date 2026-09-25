@@ -3,25 +3,48 @@
 #include "opencv2/opencv.hpp"
 #include "tools/img_tools.hpp"
 
+#include <exception>
+#include <iostream>
+
 int main()
 {
-    // 初始化相机、yolo类
-    
-    // while (1) {
-        // 调用相机读取图像
+    try {
+        // 初始化相机、yolo类
+        Camera camera;
+        auto_aim::YOLO yolo("./configs/yolo.yaml", false);
+        
+        while (1) {
+            // 调用相机读取图像
+            cv::Mat img;
+            if (!camera.read(img)) {
+                if (cv::waitKey(1) == 'q') {
+                    break;
+                }
+                continue;
+            }
 
+            // 调用yolo识别装甲板
+            auto armors = yolo.detect(img);
 
-        // 调用yolo识别装甲板
+            // 按关键点顺序画出绿色闭合轮廓。
+            for (const auto & armor : armors) {
+                tools::draw_points(img, armor.points, cv::Scalar(0, 255, 0));
+            }
 
+            cv::resize(img, img, cv::Size(640, 480));
+            cv::imshow("img", img);
+            if (cv::waitKey(1) == 'q') {
+                break;
+            }
+        }
 
-
-        // 显示图像
-        // cv::resize(img, img , cv::Size(640, 480));
-        // cv::imshow("img", img);
-        // if (cv::waitKey(0) == 'q') {
-        //     // break;
-        // }
-    // }
+        cv::destroyAllWindows();
+    } 
+    catch (const std::exception & e) {
+        // 统一打印初始化或运行异常，已构造的相机自动析构。
+        std::cerr << "运行失败: " << e.what() << std::endl;
+        return 1;
+    }
 
     return 0;
 }
