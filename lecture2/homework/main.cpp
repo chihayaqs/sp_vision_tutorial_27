@@ -29,7 +29,7 @@ int main()
             // 按关键点顺序画出绿色闭合轮廓。
             for (const auto & armor : armors) {
                 tools::draw_points(img, armor.points, cv::Scalar(0, 255, 0));
-                // 在装甲板中心标注名称。
+                // 在装甲板中心标注名称
                 tools::draw_text(
                     img, auto_aim::ARMOR_NAMES.at(armor.name),
                     armor.center, cv::Scalar(0, 255, 0));
