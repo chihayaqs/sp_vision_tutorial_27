@@ -29,10 +29,12 @@ int main()
             // 按关键点顺序画出绿色闭合轮廓。
             for (const auto & armor : armors) {
                 tools::draw_points(img, armor.points, cv::Scalar(0, 255, 0));
-                // 在装甲板中心标注名称
+                // 在边框上方标注名称
+                cv::Rect box = cv::boundingRect(armor.points);
                 tools::draw_text(
-                    img, auto_aim::ARMOR_NAMES.at(armor.name),
-                    armor.center, cv::Scalar(0, 255, 0));
+                    img, auto_aim::COLORS.at(armor.color) + auto_aim::ARMOR_NAMES.at(armor.name),
+                    cv::Point2f(box.x, box.y - 10), 
+                    cv::Scalar(0, 255, 0));
             }
 
             cv::resize(img, img, cv::Size(640, 480));
