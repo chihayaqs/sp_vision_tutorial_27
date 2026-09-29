@@ -14,3 +14,11 @@ watchdog.sh
 records_24/
 records_25/
 partterns/
+# ROS2 / colcon 生成文件
+install/
+log/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.egg-info/
