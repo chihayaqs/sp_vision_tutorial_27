@@ -11,6 +11,7 @@ std::mutex mutex;
 
 void work()
 {
+  std::lock_guard<std::mutex> lock(mutex);  // 使用互斥锁保护对 counter 的访问
   for (int i = 0; i < N; ++i) {
     counter++;
   }
