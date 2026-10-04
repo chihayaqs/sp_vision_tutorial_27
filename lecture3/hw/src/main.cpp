@@ -65,8 +65,8 @@ int main(int argc, char **argv)
                   << options.workers << "\n\n";
 
         auto source = std::make_unique<ImageSequenceSource>(
-            options.input, options.producer_delay_ms);
-        Pipeline pipeline(std::move(source),
+            options.input, options.producer_delay_ms); // 创建图像序列源
+        Pipeline pipeline(std::move(source), // 所有权交给pipeline
                           {options.workers, options.worker_delay_ms, options.output});
         pipeline.start();
         pipeline.wait();
@@ -82,7 +82,7 @@ int main(int argc, char **argv)
         const bool passed = stats.produced > 0 &&
                             stats.produced == stats.processed &&
                             stats.processed == stats.saved &&
-                            stats.corrupted == 0;
+                            stats.corrupted == 0; // 统计结果验收
         std::cout << (passed ? "PASS: all checks passed\n"
                              : "FAIL: pipeline checks failed\n");
         return passed ? 0 : 1;

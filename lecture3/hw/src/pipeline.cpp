@@ -37,7 +37,8 @@ Pipeline::Pipeline(std::unique_ptr<FrameSource> source, PipelineConfig config)
 
 Pipeline::~Pipeline()
 {
-    // TODO: Make sure Pipeline never destroys running threads.
+    // 析构时保证回收线程
+    wait();
 }
 
 void Pipeline::start()
@@ -55,6 +56,7 @@ void Pipeline::start()
 
 void Pipeline::wait()
 {
+    // 等producer和每个worker线程结束，并正确回收
     if (producer_.joinable())
     {
         producer_.join();
@@ -81,8 +83,9 @@ void Pipeline::producerLoop()
         statistics_.onProduced();
         logLine(std::cout, "[Producer] frame " + std::to_string(frame.id));
 
-        // What's the best way to write this?
-        queue_.push(frame);
+        // 当producer不再需要这个frame，就用std::move(frame)把它交给队列继续管理，
+        // 减少原代码中一次不必要的浅拷贝
+        queue_.push(std::move(frame));
     }
     queue_.close();
 }
@@ -98,7 +101,7 @@ void Pipeline::workerLoop(int worker_id)
                 std::chrono::milliseconds(config_.worker_delay_ms));
         }
 
-        if (checksum(frame.image) != frame.expected_checksum)
+        if (checksum(frame.image) != frame.expected_checksum) // 重新计算当前像素checksum,被更改的帧不处理
         {
             statistics_.onCorrupted();
             logLine(std::cerr,
@@ -106,7 +109,7 @@ void Pipeline::workerLoop(int worker_id)
                         std::to_string(frame.id) + " data changed before processing");
             continue;
         }
-
+        // 处理帧、写文件名、保存
         logLine(std::cout,
                 "[Worker " + std::to_string(worker_id) + "] processing frame " +
                     std::to_string(frame.id));

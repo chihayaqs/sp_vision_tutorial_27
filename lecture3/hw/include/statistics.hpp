@@ -1,5 +1,7 @@
 #pragma once
 
+#include <mutex>
+
 struct StatisticsSnapshot
 {
     int produced = 0;
@@ -18,7 +20,8 @@ public:
     StatisticsSnapshot snapshot() const;
 
 private:
-    // TODO: This object is shared by multiple worker threads.
+    // 保证快照读出来的是同一时刻的一组一致状态
+    mutable std::mutex mutex_;
     int produced_ = 0;
     int processed_ = 0;
     int saved_ = 0;
