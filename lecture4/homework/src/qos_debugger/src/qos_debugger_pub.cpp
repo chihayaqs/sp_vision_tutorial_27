@@ -14,7 +14,8 @@ public:
     SensorPublisher()
         : Node("sensor_publisher")
     {
-        this->declare_parameter("reliability", "best_effort");
+        // 让 publisher 提供和 subscriber 兼容的 reliability
+        this->declare_parameter("reliability", "reliable");
         this->declare_parameter("depth", 10);
         this->declare_parameter("rate", 100.0);
 
