@@ -98,6 +98,14 @@ void NavInterfaceNode::init_engine()
   RCLCPP_INFO(this->get_logger(),
     "Restart-task service ready at /nav_interface/restart_task");
 }
+// 先请求停止，再 join
+void NavInterfaceNode::stop()
+{
+  if (bt_thread_.joinable()) {
+    bt_engine_->halt();
+    bt_thread_.join();
+  }
+}
 
 rclcpp_action::GoalResponse NavInterfaceNode::handle_goal(
   const rclcpp_action::GoalUUID & uuid,
@@ -278,6 +286,7 @@ int main(int argc, char ** argv)
   auto node = std::make_shared<sp_nav_bt::NavInterfaceNode>();
   node->init_engine();
   rclcpp::spin(node);
+  node->stop();
   rclcpp::shutdown();
   return 0;
 }

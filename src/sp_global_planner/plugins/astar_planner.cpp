@@ -40,6 +40,11 @@ void AStarPlanner::configure(const rclcpp::Node::SharedPtr& node, const std::str
 
   lethal_cost_  = require_param<int>(node, plugin_name + ".lethal_cost");
   cost_weight_  = require_param<double>(node, plugin_name + ".cost_weight");
+  // 从 AStar 参数段读取原路径吸引权重、折角平滑权重、迭代次数和重采样间距
+  smoothing_data_weight_ = require_param<double>(node, plugin_name + ".smoothing_data_weight");
+  smoothing_smooth_weight_ = require_param<double>(node, plugin_name + ".smoothing_smooth_weight");
+  smoothing_iterations_ = require_param<int>(node, plugin_name + ".smoothing_iterations");
+  path_spacing_ = require_param<double>(node, plugin_name + ".path_spacing");
 
   RCLCPP_INFO(logger_, "AStarPlanner configured: lethal_cost=%d cost_weight=%.3f",
               lethal_cost_, cost_weight_);
@@ -62,6 +67,89 @@ double AStarPlanner::cellCostFactor(int8_t c) const
 
   double cc = std::max<int>(0, c);
   return 1.0 + cost_weight_ * (cc / 100.0);
+}
+
+bool AStarPlanner::isSegmentFree(
+  const geometry_msgs::msg::Point& from,
+  const geometry_msgs::msg::Point& to) const
+{
+  const auto& map = *map_;
+  const double length = std::hypot(to.x - from.x, to.y - from.y);
+  // 线段按四分之一栅格分辨率采样，并检查两端及中间采样点是否可通行。
+  const int samples = std::max(1, static_cast<int>(std::ceil(length / (map.info.resolution * 0.25))));
+  for (int i = 0; i <= samples; ++i) {
+    const double ratio = static_cast<double>(i) / samples;
+    GridIndex cell;
+    if (!worldToGrid(map, from.x + ratio * (to.x - from.x),
+                     from.y + ratio * (to.y - from.y), cell) ||
+        isBlocked(map.data[toIndex(map, cell.x, cell.y)])) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// 路径平滑
+void AStarPlanner::smoothPath(nav_msgs::msg::Path& path) const
+{
+  const auto original = path.poses;
+  // 固定起终点，用原路径约束偏移，并用相邻点拉平折角
+  for (int iteration = 0; iteration < smoothing_iterations_; ++iteration) {
+    for (size_t i = 1; i + 1 < path.poses.size(); ++i) {
+      auto& current = path.poses[i].pose.position;
+      const auto& before = path.poses[i - 1].pose.position;
+      const auto& after = path.poses[i + 1].pose.position;
+      const auto& anchor = original[i].pose.position;
+      // candidate是待尝试的新位置；anchor拉回原路径，before/after减小折角
+      auto candidate = current;
+      candidate.x += smoothing_data_weight_ * (anchor.x - current.x) +
+        smoothing_smooth_weight_ * (before.x + after.x - 2.0 * current.x);
+      candidate.y += smoothing_data_weight_ * (anchor.y - current.y) +
+        smoothing_smooth_weight_ * (before.y + after.y - 2.0 * current.y);
+      // 代价地图检查，避免拉进墙壁
+      if (isSegmentFree(before, candidate) && isSegmentFree(candidate, after)) {
+        current = candidate;
+      }
+    }
+  }
+
+  std::vector<geometry_msgs::msg::PoseStamped> sampled{path.poses.front()};
+  // traversed已走过的弧长，next_sample下一个等距采样位置
+  double traversed = 0.0;
+  double next_sample = path_spacing_;
+  // 按弧长等距取点，使控制器的前视距离不受栅格方向影响
+  for (size_t i = 1; i < path.poses.size(); ++i) {
+    const auto& from = path.poses[i - 1].pose.position;
+    const auto& to = path.poses[i].pose.position;
+    const double length = std::hypot(to.x - from.x, to.y - from.y);
+    while (next_sample < traversed + length) {
+      const double ratio = (next_sample - traversed) / length;
+      auto pose = path.poses[i];
+      pose.pose.position.x = from.x + ratio * (to.x - from.x);
+      pose.pose.position.y = from.y + ratio * (to.y - from.y);
+      sampled.push_back(pose);
+      next_sample += path_spacing_;
+    }
+    traversed += length;
+  }
+  // 补回精确终点，避免采样间距使路径提前结束
+  const auto& last = sampled.back().pose.position;
+  const auto& goal = path.poses.back().pose.position;
+  if (std::hypot(goal.x - last.x, goal.y - last.y) > 0.0) {
+    sampled.push_back(path.poses.back());
+  }
+  path.poses = std::move(sampled);
+  for (size_t i = 0; i + 1 < path.poses.size(); ++i) {
+    const auto& from = path.poses[i].pose.position;
+    const auto& to = path.poses[i + 1].pose.position;
+    // 用相邻采样点方向设置路径朝向，终点沿用最后一段朝向
+    const double yaw = std::atan2(to.y - from.y, to.x - from.x);
+    path.poses[i].pose.orientation.z = yaw_to_quat_z(yaw);
+    path.poses[i].pose.orientation.w = yaw_to_quat_w(yaw);
+  }
+  if (path.poses.size() > 1) {
+    path.poses.back().pose.orientation = path.poses[path.poses.size() - 2].pose.orientation;
+  }
 }
 
 nav_msgs::msg::Path AStarPlanner::createPlan(
@@ -160,6 +248,9 @@ nav_msgs::msg::Path AStarPlanner::createPlan(
 
       int8_t c = map.data[ni];
       if (isBlocked(c)) continue;
+      // 斜向移动时，保证两侧格子能通过，避免从墙角穿过去
+      if (k >= 4 && (isBlocked(map.data[idx(nx, cy)]) ||
+                     isBlocked(map.data[idx(cx, ny)]))) continue;
 
       double step = (k < 4) ? 1.0 : std::sqrt(2.0);
 
@@ -209,6 +300,15 @@ nav_msgs::msg::Path AStarPlanner::createPlan(
     ps.pose.orientation.w = 1.0;
     path.poses.push_back(ps);
   }
+
+  // 同一栅格内也保留起终点两个位置，表达最后一小段运动
+  if (path.poses.size() == 1) {
+    path.poses.push_back(path.poses.front());
+  }
+  // 使用实际起终点替换栅格中心，使规划终点与到达判据一致
+  path.poses.front().pose.position = start.pose.position;
+  path.poses.back().pose.position = goal.pose.position;
+  smoothPath(path);
 
   return path;
 }

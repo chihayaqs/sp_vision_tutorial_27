@@ -3,7 +3,8 @@
 <package format="3">
   <name>sp_nav_bringup</name>
   <version>0.0.0</version>
-  <description>Bringup package for SP Nav tutorial (A* + PID + click_nav)</description>
+  <!-- 启动包组合地图、A*规划、MPC控制和导航行为树 -->
+  <description>Maze navigation with A* path smoothing, MPC and click navigation</description>
   <maintainer email="rm@example.com">rm</maintainer>
   <license>Apache-2.0</license>
 

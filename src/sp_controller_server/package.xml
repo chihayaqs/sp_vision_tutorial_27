@@ -3,7 +3,7 @@
 <package format="3">
   <name>sp_controller_server</name>
   <version>0.0.0</version>
-  <description>Controller server with PID plugin for tutorial</description>
+  <description>Constrained MPC trajectory tracking for maze navigation</description>
   <maintainer email="rm@example.com">rm</maintainer>
   <license>Apache-2.0</license>
 
@@ -16,6 +16,8 @@
   <depend>tf2_ros</depend>
   <depend>tf2_geometry_msgs</depend>
   <depend>std_srvs</depend>
+  <!--MPC的预测矩阵和约束优化使用Eigen-->
+  <depend>eigen</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

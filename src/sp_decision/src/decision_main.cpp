@@ -7,6 +7,7 @@
 #include <QApplication>
 #include <QFont>
 #include <QFontDatabase>
+#include <QTimer>
 
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/exceptions.hpp"
@@ -154,6 +155,14 @@ int main(int argc, char *argv[])
                            {
     executor.spin();
     ros_ok.store(false); });
+
+    QTimer ros_shutdown_timer;
+    QObject::connect(&ros_shutdown_timer, &QTimer::timeout, [&app, &ros_ok]() {
+      if (!ros_ok.load()) {
+        app.quit();
+      }
+    });
+    ros_shutdown_timer.start(100);
 
     sp_decision::DecisionGui gui(engine);
     gui.show();

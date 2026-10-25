@@ -28,6 +28,7 @@ public:
   virtual ~NavInterfaceNode() = default;
 
   void init_engine();
+  void stop();
 
 protected:
 

@@ -17,6 +17,13 @@ NavStateTrack::NavStateTrack(const std::string & name, const BT::NodeConfigurati
 
   tf_buffer_ = std::make_shared<tf2_ros::Buffer>(node_->get_clock());
   tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
+  // 从odom_topic订阅实测速度，hypot(vx,vy)得到与坐标旋转无关的合速度
+  const auto odom_topic = getInput<std::string>("odom_topic").value();
+  odom_sub_ = node_->create_subscription<nav_msgs::msg::Odometry>(
+    odom_topic, rclcpp::QoS(10),
+    [this](const nav_msgs::msg::Odometry::SharedPtr msg) {
+      current_speed_.store(std::hypot(msg->twist.twist.linear.x, msg->twist.twist.linear.y));
+    });
 }
 
 BT::PortsList NavStateTrack::providedPorts()
@@ -26,6 +33,9 @@ BT::PortsList NavStateTrack::providedPorts()
       "goal_pose", "Target pose (default: read from blackboard key 'goal_pose')"),
     BT::InputPort<double>(
       "goal_tolerance", 0.2, "Distance threshold to consider goal reached (metres)"),
+    // 到达需要同时满足位置和速度阈值，速度来源由odom_topic指定
+    BT::InputPort<double>("goal_speed_tolerance", 0.06, "到达时的线速度阈值 m/s"),
+    BT::InputPort<std::string>("odom_topic", "/Odometry", "机器人里程计话题"),
     BT::OutputPort<double>("remaining_distance", "Euclidean distance to goal (metres)"),
     BT::OutputPort<double>("elapsed_time",       "Time elapsed since task started (seconds)")
   };
@@ -41,8 +51,6 @@ BT::NodeStatus NavStateTrack::onStart()
 
 BT::NodeStatus NavStateTrack::onRunning()
 {
-  RCLCPP_INFO(node_->get_logger(), "[NavStateTrack] onRunning() ticked.");
-
   geometry_msgs::msg::PoseStamped goal_pose;
   if (!getInput<geometry_msgs::msg::PoseStamped>("goal_pose", goal_pose)) {
 
@@ -86,21 +94,22 @@ BT::NodeStatus NavStateTrack::onRunning()
 
   double tolerance = 0.2;
   getInput<double>("goal_tolerance", tolerance);
+  // 读取速度阈值和最新合速度，与剩余距离共同判断到达
+  const double speed_tolerance = getInput<double>("goal_speed_tolerance").value();
+  const double speed = current_speed_.load();
 
-  RCLCPP_INFO(node_->get_logger(),
-    "[NavStateTrack] goal=(%.2f, %.2f) current=(%.2f, %.2f) remaining=%.3f tol=%.3f",
+  RCLCPP_INFO_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
+    "[NavStateTrack] goal=(%.2f, %.2f) current=(%.2f, %.2f) remaining=%.3f "
+    "speed=%.3f",
     goal_pose.pose.position.x, goal_pose.pose.position.y,
     current_x, current_y,
-    remaining, tolerance);
+    remaining, speed);
 
-  if (remaining < tolerance) {
+  if (remaining < tolerance && speed < speed_tolerance) {
     RCLCPP_INFO(node_->get_logger(),
       "[NavStateTrack] Goal reached! remaining=%.3f m, elapsed=%.2f s", remaining, elapsed_sec);
     return BT::NodeStatus::SUCCESS;
   }
-
-  RCLCPP_INFO(node_->get_logger(),
-    "[NavStateTrack] Goal not reached yet, returning RUNNING.");
 
   return BT::NodeStatus::RUNNING;
 }

@@ -72,6 +72,8 @@ void WaitDuration::onHalted()
     infinite_        = false;
     target_duration_ = std::chrono::duration<double>(0);
     start_time_      = std::chrono::steady_clock::time_point{};
+    // 被 ConditionJudge 切换掉后从 onStart() 重新读取 duration
+    setStatus(BT::NodeStatus::IDLE);
     RCLCPP_INFO(node_->get_logger(), "[WaitDuration] Halted – timer cleared.");
 }
 

@@ -64,7 +64,7 @@ bool DecisionEngine::start(const std::string & xml_file)
 
 void DecisionEngine::stop()
 {
-  if (!running_.load()) { return; }
+  if (!running_.load() && !bt_thread_.joinable()) { return; }
 
   stop_requested_.store(true);
   if (engine_) { engine_->halt(); }

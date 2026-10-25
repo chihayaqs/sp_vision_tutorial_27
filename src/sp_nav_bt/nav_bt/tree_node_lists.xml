@@ -26,6 +26,9 @@
     <Action ID="nav_NavStateTrack">
       <input_port name="goal_pose" type="geometry_msgs::msg::PoseStamped">导航目标位姿</input_port>
       <input_port name="goal_tolerance" default="0.2" type="double">到达判据：与目标欧氏距离阈值 m</input_port>
+      <!-- 到达节点增加速度阈值和里程计话题，与 NavStateTrack::providedPorts 对应 -->
+      <input_port name="goal_speed_tolerance" default="0.06" type="double">到达判据：线速度阈值 m/s</input_port>
+      <input_port name="odom_topic" default="/Odometry" type="std::string">机器人里程计话题</input_port>
       <output_port name="remaining_distance" type="double">距目标剩余距离 m</output_port>
       <output_port name="elapsed_time" type="double">本段任务已用时间 s</output_port>
     </Action>
