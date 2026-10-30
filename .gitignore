@@ -14,3 +14,10 @@ watchdog.sh
 records_24/
 records_25/
 partterns/
+# ROS 2 / colcon
+install/
+log/
+
+# Python cache
+__pycache__/
+*.py[cod]

@@ -13,12 +13,12 @@
 
 namespace auto_aim
 {
-constexpr double LIGHTBAR_LENGTH = 56e-3;       // m
+constexpr double LIGHTBAR_LENGTH = 56e-3;       // m 装甲板实际物理尺寸
 constexpr double BIG_ARMOR_WIDTH = 230e-3;      // m
 constexpr double SMALL_ARMOR_WIDTH = 135e-3;    // m
 constexpr double SPECIAL_ARMOR_WIDTH = 129e-3;  // m
 
-const std::vector<cv::Point3f> BIG_ARMOR_POINTS{
+const std::vector<cv::Point3f> BIG_ARMOR_POINTS{ // PnP三维点集：左上/右上/右下/左下；向左y正，向上z正
   {0, BIG_ARMOR_WIDTH / 2, LIGHTBAR_LENGTH / 2},
   {0, -BIG_ARMOR_WIDTH / 2, LIGHTBAR_LENGTH / 2},
   {0, -BIG_ARMOR_WIDTH / 2, -LIGHTBAR_LENGTH / 2},
@@ -72,32 +72,39 @@ void Solver::solve(Armor & armor) const
 {
   const auto & object_points = (armor.type == ArmorType::big)       ? BIG_ARMOR_POINTS
                                : (armor.type == ArmorType::special) ? SPECIAL_ARMOR_POINTS
-                                                                    : SMALL_ARMOR_POINTS;
+                                                                    : SMALL_ARMOR_POINTS;// 三元条件运算，根据装甲板类型选择三维模型
 
   cv::Vec3d rvec, tvec;
   cv::solvePnP(
     object_points, armor.points, camera_matrix_, distort_coeffs_, rvec, tvec, false,
-    cv::SOLVEPNP_IPPE);
+    cv::SOLVEPNP_IPPE);// 调用solvePnP函数，传入物体点、图像点、相机内参、畸变系数，得到旋转向量和平移向量
 
+
+// 以下为位置坐标系转换 局部原点-> 相机tvec -> 云台坐标系 -> 世界坐标系
   Eigen::Vector3d xyz_in_camera;
-  cv::cv2eigen(tvec, xyz_in_camera);
-  armor.xyz_in_gimbal = R_camera2gimbal_ * xyz_in_camera + t_camera2gimbal_;
+  cv::cv2eigen(tvec, xyz_in_camera);// 把tvec转成Eigen向量
+  armor.xyz_in_gimbal = R_camera2gimbal_ * xyz_in_camera + t_camera2gimbal_;// 从相机坐标系转换到云台坐标系，*旋转矩阵+平移向量
 
   double yaw = tools::eulers(R_gimbal2world_, 2, 1, 0)[0];
   Eigen::Matrix3d R_yaw = Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix();
-  armor.xyz_in_world = R_gimbal2world_ * armor.xyz_in_gimbal + R_yaw * t_yaw2pitch_;
+  armor.xyz_in_world = R_gimbal2world_ * armor.xyz_in_gimbal + R_yaw * t_yaw2pitch_;// 从云台系转到世界系，新增了一个云台轴间平移偏置t_yaw2pitch
+// 该旋转矩阵根据云台姿态更新
 
+
+// 以下为姿态坐标系转换 局部方向 -> 相机rvec -> 云台坐标系 -> 世界坐标系，通过复合旋转矩阵
   cv::Mat rmat;
-  cv::Rodrigues(rvec, rmat);
+  cv::Rodrigues(rvec, rmat);// 转成旋转矩阵
   Eigen::Matrix3d R_armor2camera;
   cv::cv2eigen(rmat, R_armor2camera);
-  Eigen::Matrix3d R_armor2gimbal = R_camera2gimbal_ * R_armor2camera;
-  Eigen::Matrix3d R_armor2world = R_gimbal2world_ * R_armor2gimbal;
-  armor.ypr_in_gimbal = tools::eulers(R_armor2gimbal, 2, 1, 0);
+  Eigen::Matrix3d R_armor2gimbal = R_camera2gimbal_ * R_armor2camera;// 从相机坐标系转换到云台坐标系
+  Eigen::Matrix3d R_armor2world = R_gimbal2world_ * R_armor2gimbal;// 到世界坐标系
+  armor.ypr_in_gimbal = tools::eulers(R_armor2gimbal, 2, 1, 0);// 装甲板自身姿态
   armor.ypr_in_world = tools::eulers(R_armor2world, 2, 1, 0);
 
-  armor.ypd_in_world = tools::xyz2ypd(armor.xyz_in_world);
+  armor.ypd_in_world = tools::xyz2ypd(armor.xyz_in_world);// 装甲板相对于参考原点的方向角与距离，
+  // 世界坐标系下从直角坐标系转换到球坐标系，得到yaw/pitch/distance
 
+  // 重投影优化，将三维角点重新投影到图像，比较与yolo监测点之间的误差，尝试不同yaw选择误差最小结果
   // 平衡不做yaw优化，因为pitch假设不成立
   auto is_balance = (armor.type == ArmorType::big) &&
                     (armor.name == ArmorName::three || armor.name == ArmorName::four ||

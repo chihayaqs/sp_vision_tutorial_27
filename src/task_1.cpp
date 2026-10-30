@@ -17,7 +17,7 @@ const std::string keys =
 
 using namespace std::chrono_literals;
 
-int main(int argc, char * argv[])
+int main(int argc, char * argv[])// 带命令行参数的main函数，argc是参数个数，argv是参数数组
 {
   cv::CommandLineParser cli(argc, argv, keys);
   auto config_path = cli.get<std::string>("@config-path");
@@ -35,10 +35,10 @@ int main(int argc, char * argv[])
   io::Gimbal gimbal(config_path);
 
   // 初始化auto_aim类
-  auto_aim::YOLO yolo(config_path, true);
+  auto_aim::YOLO yolo(config_path, true); // 调用auto_aim命名空间下Solver类的构造函数，创建对象，传入配置文件路径
   auto_aim::Solver solver(config_path);
 
-  cv::Mat img;
+  cv::Mat img; // 三个变量 存图像/姿态四元数/时间戳
   Eigen::Quaterniond q;
   std::chrono::steady_clock::time_point t;
 

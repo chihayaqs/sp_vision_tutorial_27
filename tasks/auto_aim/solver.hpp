@@ -19,9 +19,9 @@ public:
 
   Eigen::Matrix3d R_gimbal2world() const;
 
-  void set_R_gimbal2world(const Eigen::Quaterniond & q);
+  void set_R_gimbal2world(const Eigen::Quaterniond & q); // 根据姿态信息更新坐标转换关系
 
-  void solve(Armor & armor) const;
+  void solve(Armor & armor) const;// 计算装甲板的空间位姿；引用参数，直接修改传入的armor对象，解算结果填入对应字段
 
   std::vector<cv::Point2f> reproject_armor(
     const Eigen::Vector3d & xyz_in_world, double yaw, ArmorType type, ArmorName name) const;
